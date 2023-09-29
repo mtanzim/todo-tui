@@ -63,9 +63,20 @@ fn main() {
                 println!("no tasks to add");
             }
             "remove" if args.len() > 2 => {
-                println!("removing tasks");
                 let task_ids = &args[2..];
-                dbg!(task_ids);
+                let valid_ids: Vec<i32> = task_ids.iter().map(|raw_id| match raw_id.parse::<i32>() {
+                    Ok(num) => num,
+                    _ => -1
+                }).filter(|i| *i > 0).collect();
+                println!("removing tasks {:?}", valid_ids);
+                for id in valid_ids {
+                    conn.execute(
+                        "DELETE FROM tasks WHERE id=?1",
+                        (id,),
+                    )
+                    .expect("cannot remove task");
+                }
+                read_back();
             }
             "remove" => {
                 println!("no tasks to remove");
