@@ -39,7 +39,12 @@ fn main() {
             .expect("could not unmarshal to tasks");
 
         for task in tasks_iter {
-            println!("Found task {:?}", task);
+            match task {
+                Ok(t) => {
+                    println!("{}\t{}\t{}", t.id, t.name, t.completed)
+                }
+                Err(_) => {}
+            }
         }
     };
 
@@ -47,6 +52,7 @@ fn main() {
     let cmd_opt = args.get(1);
     match cmd_opt {
         Some(cmd) => match cmd.as_str() {
+            "view" => read_back(),
             "add" if args.len() > 2 => {
                 println!("adding tasks");
                 let tasks = &args[2..];
@@ -64,17 +70,18 @@ fn main() {
             }
             "remove" if args.len() > 2 => {
                 let task_ids = &args[2..];
-                let valid_ids: Vec<i32> = task_ids.iter().map(|raw_id| match raw_id.parse::<i32>() {
-                    Ok(num) => num,
-                    _ => -1
-                }).filter(|i| *i > 0).collect();
+                let valid_ids: Vec<i32> = task_ids
+                    .iter()
+                    .map(|raw_id| match raw_id.parse::<i32>() {
+                        Ok(num) => num,
+                        _ => -1,
+                    })
+                    .filter(|i| *i > 0)
+                    .collect();
                 println!("removing tasks {:?}", valid_ids);
                 for id in valid_ids {
-                    conn.execute(
-                        "DELETE FROM tasks WHERE id=?1",
-                        (id,),
-                    )
-                    .expect("cannot remove task");
+                    conn.execute("DELETE FROM tasks WHERE id=?1", (id,))
+                        .expect("cannot remove task");
                 }
                 read_back();
             }
