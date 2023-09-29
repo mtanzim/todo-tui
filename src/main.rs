@@ -1,6 +1,13 @@
 use rusqlite::Connection;
 use std::env;
 
+#[derive(Debug)]
+struct Task {
+    id: i32,
+    name: String,
+    completed: bool,
+}
+
 fn main() {
     let conn = Connection::open("tasks.db").expect("could not open connection to tasks database");
     conn.execute(
@@ -13,6 +20,29 @@ fn main() {
     )
     .expect("could not create table");
 
+    let read_back = || {
+        let mut stmt = conn
+            .prepare("SELECT id, name, completed FROM tasks")
+            .expect("could not read back tasks");
+        let tasks_iter = stmt
+            .query_map([], |row| {
+                let completed = match row.get(2) {
+                    Ok(1) => true,
+                    _ => false,
+                };
+                Ok(Task {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    completed: completed,
+                })
+            })
+            .expect("could not unmarshal to tasks");
+
+        for task in tasks_iter {
+            println!("Found task {:?}", task);
+        }
+    };
+
     let args: Vec<String> = env::args().collect();
     let cmd_opt = args.get(1);
     match cmd_opt {
@@ -21,10 +51,13 @@ fn main() {
                 println!("adding tasks");
                 let tasks = &args[2..];
                 for t in tasks {
-                    conn.execute("INSERT INTO tasks (name) VALUES (?1)", (t.to_owned(),))
-                        .expect("cannot enter task");
+                    conn.execute(
+                        "INSERT INTO tasks (name, completed) VALUES (?1, ?2)",
+                        (t.to_owned(), 0),
+                    )
+                    .expect("cannot enter task");
                 }
-                dbg!(tasks);
+                read_back();
             }
             "add" => {
                 println!("no tasks to add");
@@ -46,6 +79,8 @@ fn main() {
                 println!("no tasks to done");
             }
             "clear" => {
+                conn.execute("DELETE FROM tasks WHERE id > 0", ())
+                    .expect("cannot clear taks");
                 println!("clearing all tasks");
             }
             _ => {
