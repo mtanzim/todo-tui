@@ -1,3 +1,4 @@
+use colored::Colorize;
 use rusqlite::Connection;
 use std::env;
 
@@ -9,6 +10,8 @@ struct Task {
 }
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    let cmd_opt = args.get(1);
     let conn = Connection::open("tasks.db").expect("could not open connection to tasks database");
     conn.execute(
         "CREATE TABLE IF NOT EXISTS tasks (
@@ -33,7 +36,7 @@ fn main() {
 
     let read_back = || {
         let mut stmt = conn
-            .prepare("SELECT id, name, completed FROM tasks")
+            .prepare("SELECT id, name, completed FROM tasks ORDER BY completed")
             .expect("could not read back tasks");
         let tasks_iter = stmt
             .query_map([], |row| {
@@ -52,15 +55,21 @@ fn main() {
         for task in tasks_iter {
             match task {
                 Ok(t) => {
-                    println!("{}\t{}\t{}", t.id, t.name, t.completed)
+                    println!(
+                        "{}\t{}",
+                        t.id,
+                        if t.completed {
+                            t.name.green()
+                        } else {
+                            t.name.red()
+                        }
+                    )
                 }
                 Err(_) => {}
             }
         }
     };
 
-    let args: Vec<String> = env::args().collect();
-    let cmd_opt = args.get(1);
     match cmd_opt {
         Some(cmd) => match cmd.as_str() {
             "view" => read_back(),
@@ -68,11 +77,15 @@ fn main() {
                 println!("adding tasks");
                 let tasks = &args[2..];
                 for t in tasks {
-                    conn.execute(
+                    match conn.execute(
                         "INSERT INTO tasks (name, completed) VALUES (?1, ?2)",
                         (t.to_owned(), 0),
-                    )
-                    .expect("cannot enter task");
+                    ) {
+                        Ok(_) => {}
+                        Err(_) => {
+                            println!("cannot insert task: {}", t)
+                        }
+                    }
                 }
                 read_back();
             }
@@ -84,8 +97,12 @@ fn main() {
                 let valid_ids = get_valid_ids(task_ids);
                 println!("removing tasks {:?}", valid_ids);
                 for id in valid_ids {
-                    conn.execute("DELETE FROM tasks WHERE id=?1", (id,))
-                        .expect("cannot remove task");
+                    match conn.execute("DELETE FROM tasks WHERE id=?1", (id,)) {
+                        Ok(_) => {}
+                        Err(_) => {
+                            println!("cannot delete task id: {}", id)
+                        }
+                    }
                 }
                 read_back();
             }
@@ -97,8 +114,12 @@ fn main() {
                 let task_ids = &args[2..];
                 let valid_ids = get_valid_ids(task_ids);
                 for id in valid_ids {
-                    conn.execute("UPDATE tasks SET completed = 1 WHERE id=?1", (id,))
-                        .expect("cannot remove task");
+                    match conn.execute("UPDATE tasks SET completed = 1 WHERE id=?1", (id,)) {
+                        Ok(_) => {}
+                        Err(_) => {
+                            println!("cannot update task id: {}", id)
+                        }
+                    }
                 }
                 read_back();
             }
@@ -106,9 +127,13 @@ fn main() {
                 println!("no tasks to done");
             }
             "clear" => {
-                conn.execute("DELETE FROM tasks WHERE id > 0", ())
-                    .expect("cannot clear taks");
                 println!("clearing all tasks");
+                match conn.execute("DELETE FROM tasks WHERE id > 0", ()) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        println!("cannot clear all tasks")
+                    }
+                }
             }
             _ => {
                 println!("invalid command supplied")
